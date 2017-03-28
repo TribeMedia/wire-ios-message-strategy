@@ -528,14 +528,10 @@ extension ClientMessageRequestFactoryTests {
                             moc: NSManagedObjectContext) -> ZMAssetClientMessage {
         let nonce = UUID.create()
         let imageMessage = ZMAssetClientMessage(originalImageData: imageData, nonce: nonce, managedObjectContext: moc, expiresAfter: ephemeral ? 10 : 0)
-        imageMessage.isEncrypted = encrypted
         if processed {
             let imageSize = ZMImagePreprocessor.sizeOfPrerotatedImage(with: imageData)
             let properties = ZMIImageProperties(size: imageSize, length: UInt(imageData.count), mimeType: "image/jpeg")
-            var keys: ZMImageAssetEncryptionKeys?
-            if encrypted {
-                keys = ZMImageAssetEncryptionKeys.init(otrKey: Data.zmRandomSHA256Key(), macKey: Data.zmRandomSHA256Key(), mac: Data.zmRandomSHA256Key())
-            }
+            let keys = ZMImageAssetEncryptionKeys.init(otrKey: Data.zmRandomSHA256Key(), macKey: Data.zmRandomSHA256Key(), mac: Data.zmRandomSHA256Key())
             let message = ZMGenericMessage.genericMessage(mediumImageProperties: properties, processedImageProperties: properties, encryptionKeys: keys, nonce: nonce.transportString(), format: format, expiresAfter: ephemeral ? 10 : nil)
             imageMessage.add(message)
             

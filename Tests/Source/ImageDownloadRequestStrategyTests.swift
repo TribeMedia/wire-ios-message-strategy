@@ -156,7 +156,6 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
             // GIVEN
             let imageData = self.verySmallJPEGData()
             let message = self.createImageMessage(withAssetId: UUID.create())
-            message.isEncrypted = false
             let response = ZMTransportResponse(imageData: imageData, httpStatus: 200, transportSessionError: nil, headers: nil)
             
             // WHEN
@@ -165,7 +164,6 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
             
             // THEN
             XCTAssertEqual(storedData, imageData)
-            
         }
         
         XCTAssertTrue(waitForAllGroupsToBeEmpty(withTimeout: 0.5))
