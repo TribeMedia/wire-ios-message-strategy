@@ -33,15 +33,18 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
         self.sut = ImageDownloadRequestStrategy(clientRegistrationStatus: clientRegistrationStatus , managedObjectContext: self.syncMOC)        
     }
     
-    func createImageMessage(withAssetId assetId: UUID?) -> ZMAssetClientMessage {
+    func createImageMessage(withAssetId assetId: UUID?) -> (message: ZMAssetClientMessage, encrypted: Data) {
         let conversation = ZMConversation.insertNewObject(in: syncMOC)
         conversation.remoteIdentifier = UUID.create()
         let message = conversation.appendOTRMessage(withImageData: verySmallJPEGData(), nonce: UUID.create())
         
-        let imageData = message.imageAssetStorage?.originalImageData()
+        let imageData = message.imageAssetStorage!.originalImageData()!
         let imageSize = ZMImagePreprocessor.sizeOfPrerotatedImage(with: imageData)
-        let properties = ZMIImageProperties(size: imageSize, length: UInt(imageData!.count), mimeType: "image/jpeg")
-        let keys = ZMImageAssetEncryptionKeys(otrKey: Data.randomEncryptionKey(), macKey: Data.zmRandomSHA256Key(), mac: Data.zmRandomSHA256Key())
+        let properties = ZMIImageProperties(size: imageSize, length: UInt(imageData.count), mimeType: "image/jpeg")
+        let key = Data.randomEncryptionKey()
+        let encrypted = imageData.zmEncryptPrefixingIV(key: key)
+        let sha = encrypted.zmSHA256Digest()
+        let keys = ZMImageAssetEncryptionKeys(otrKey: key, sha256: sha)
         
         message.add(ZMGenericMessage.genericMessage(
             mediumImageProperties: properties,
@@ -63,7 +66,7 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
         message.assetId = assetId
         syncMOC.saveOrRollback()
         
-        return message
+        return (message, encrypted)
     }
     
     func createFileMessage() -> ZMAssetClientMessage {
@@ -94,9 +97,9 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
         var assetId: UUID?
         var conversationId : UUID?
         
-        self.syncMOC.performGroupedBlock {
+        self.syncMOC.performGroupedBlockAndWait {
             assetId = UUID.create()
-            let message = self.createImageMessage(withAssetId: assetId!)
+            let (message, _) = self.createImageMessage(withAssetId: assetId!)
             conversationId = message.conversation!.remoteIdentifier
             
             // remove image data or it won't be downloaded
@@ -117,7 +120,7 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
     func testRequestToDownloadAssetIsNotCreated_whenAssetIdIsNotAvailable() {
         // GIVEN
         self.syncMOC.performGroupedBlock {
-            let message = self.createImageMessage(withAssetId: nil)
+            let (message, _) = self.createImageMessage(withAssetId: nil)
             
             // remove image data or it won't be downloaded
             self.syncMOC.zm_imageAssetCache.deleteAssetData(message.nonce, format: .original, encrypted: false)
@@ -134,7 +137,7 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
     }
     
     func testRequestToDownloadFileAssetIsNotCreated() {
-        syncMOC.performGroupedBlock {
+        syncMOC.performGroupedBlockAndWait {
             // GIVEN
             let message = self.createFileMessage()
             message.transferState = .uploaded
@@ -152,27 +155,26 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
     }
     
     func testMessageImageDataIsUpdated_whenParsingAssetDownloadResponse() {
-        self.syncMOC.performGroupedBlock {
+        self.syncMOC.performGroupedBlockAndWait {
             // GIVEN
-            let imageData = self.verySmallJPEGData()
-            let message = self.createImageMessage(withAssetId: UUID.create())
-            let response = ZMTransportResponse(imageData: imageData, httpStatus: 200, transportSessionError: nil, headers: nil)
+            let (message, encrypted) = self.createImageMessage(withAssetId: UUID.create())
+            let response = ZMTransportResponse(imageData: encrypted, httpStatus: 200, transportSessionError: nil, headers: nil)
             
             // WHEN
             self.sut.update(message, with: response, downstreamSync: nil)
             let storedData = message.imageAssetStorage?.imageData(for: .medium, encrypted: false)
             
             // THEN
-            XCTAssertEqual(storedData, imageData)
+            XCTAssertEqual(storedData, message.imageAssetStorage!.originalImageData())
         }
         
         XCTAssertTrue(waitForAllGroupsToBeEmpty(withTimeout: 0.5))
     }
     
     func testMessageIsDeleted_whenDownloadRequestFail() {
-        self.syncMOC.performGroupedBlock { 
+        self.syncMOC.performGroupedBlockAndWait {
             // GIVEN
-            let message = self.createImageMessage(withAssetId: UUID.create())
+            let (message, _) = self.createImageMessage(withAssetId: UUID.create())
             
             // WHEN
             self.sut.delete(message, downstreamSync: nil)
