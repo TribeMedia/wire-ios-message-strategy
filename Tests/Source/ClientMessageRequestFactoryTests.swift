@@ -93,7 +93,7 @@ extension ClientMessageRequestFactoryTests {
                 // GIVEN
                 let imageData = self.verySmallJPEGData()
                 let format = ZMImageFormat.medium
-                let message = self.createImageMessage(imageData: imageData, format: format, processed: true, stored: false, encrypted: true, ephemeral: false, moc: self.syncMOC)
+                let message = self.createImageMessage(imageData: imageData, format: format, processed: true, stored: false, ephemeral: false, moc: self.syncMOC)
                 
                 // WHEN
                 let request = ClientMessageRequestFactory().upstreamRequestForAssetMessage(format, message: message)
@@ -114,7 +114,7 @@ extension ClientMessageRequestFactoryTests {
                 // GIVEN
                 let imageData = self.verySmallJPEGData()
                 let format = ZMImageFormat.medium
-                let message = self.createImageMessage(imageData: imageData, format: format, processed: false, stored: false, encrypted: true, ephemeral: false, moc: self.syncMOC)
+                let message = self.createImageMessage(imageData: imageData, format: format, processed: false, stored: false, ephemeral: false, moc: self.syncMOC)
                 message.assetId = UUID.create()
                 
                 // WHEN
@@ -293,7 +293,6 @@ extension ClientMessageRequestFactoryTests {
                                                   format: .medium,
                                                   processed: true,
                                                   stored: false,
-                                                  encrypted: true,
                                                   ephemeral: false,
                                                   moc: self.syncMOC)
             
@@ -500,7 +499,6 @@ extension ClientMessageRequestFactoryTests {
                                                       format: format,
                                                       processed: true,
                                                       stored: false,
-                                                      encrypted: true,
                                                       ephemeral: true,
                                                       moc: self.syncMOC)
                 
@@ -523,19 +521,14 @@ extension ClientMessageRequestFactoryTests {
                             format: ZMImageFormat,
                             processed: Bool,
                             stored: Bool,
-                            encrypted: Bool,
                             ephemeral: Bool,
                             moc: NSManagedObjectContext) -> ZMAssetClientMessage {
         let nonce = UUID.create()
         let imageMessage = ZMAssetClientMessage(originalImageData: imageData, nonce: nonce, managedObjectContext: moc, expiresAfter: ephemeral ? 10 : 0)
-        imageMessage.isEncrypted = encrypted
         if processed {
             let imageSize = ZMImagePreprocessor.sizeOfPrerotatedImage(with: imageData)
             let properties = ZMIImageProperties(size: imageSize, length: UInt(imageData.count), mimeType: "image/jpeg")
-            var keys: ZMImageAssetEncryptionKeys?
-            if encrypted {
-                keys = ZMImageAssetEncryptionKeys.init(otrKey: Data.zmRandomSHA256Key(), macKey: Data.zmRandomSHA256Key(), mac: Data.zmRandomSHA256Key())
-            }
+            let keys = ZMImageAssetEncryptionKeys.init(otrKey: Data.zmRandomSHA256Key(), macKey: Data.zmRandomSHA256Key(), mac: Data.zmRandomSHA256Key())
             let message = ZMGenericMessage.genericMessage(mediumImageProperties: properties, processedImageProperties: properties, encryptionKeys: keys, nonce: nonce.transportString(), format: format, expiresAfter: ephemeral ? 10 : nil)
             imageMessage.add(message)
             
@@ -543,12 +536,9 @@ extension ClientMessageRequestFactoryTests {
             if stored {
                 directory?.storeAssetData(nonce, format: .original, encrypted: false, data: imageData)
             }
-            if processed {
-                directory?.storeAssetData(nonce, format: format, encrypted: false, data: imageData)
-            }
-            if encrypted {
-                directory?.storeAssetData(nonce, format: format, encrypted: true, data: imageData)
-            }
+            
+            directory?.storeAssetData(nonce, format: format, encrypted: false, data: imageData)
+            directory?.storeAssetData(nonce, format: format, encrypted: true, data: imageData)
         }
         imageMessage.visibleInConversation = self.groupConversation
         return imageMessage

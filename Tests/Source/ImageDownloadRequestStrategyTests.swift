@@ -156,12 +156,11 @@ class ImageDownloadRequestStrategyTests: MessagingTestBase {
             // GIVEN
             let imageData = self.verySmallJPEGData()
             let message = self.createImageMessage(withAssetId: UUID.create())
-            message.isEncrypted = false
             let response = ZMTransportResponse(imageData: imageData, httpStatus: 200, transportSessionError: nil, headers: nil)
             
             // WHEN
             self.sut.update(message, with: response, downstreamSync: nil)
-            let storedData = message.imageAssetStorage?.imageData(for: .medium, encrypted: false)
+            let storedData = message.imageAssetStorage?.imageData(for: .medium, encrypted: true)
             
             // THEN
             XCTAssertEqual(storedData, imageData)
